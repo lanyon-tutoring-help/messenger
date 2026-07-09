@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monoco · Messenger</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      background: #0b0e11;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 16px;
+    }
+
+    #signupOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(8px);
+    }
+
+    #signupOverlay.hidden {
+      display: none;
+    }
+
+    .signup-card {
+      background: #14181c;
+      padding: 48px 40px;
+      border-radius: 32px;
+      border: 1px solid #2a3138;
+      width: 400px;
+      max-width: 90%;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8);
+    }
+
+    .signup-card h1 {
+      color: #e8edf2;
+      font-weight: 500;
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+
+    .signup-card p {
+      color: #798b9c;
+      margin-bottom: 28px;
+      font-size: 14px;
+    }
+
+    .signup-card label {
+      color: #b0c7d9;
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .signup-card input {
+      width: 100%;
+      padding: 14px 18px;
+      background: #1b232b;
+      border: 1px solid #2b353f;
+      border-radius: 14px;
+      color: #e4ecf5;
+      font-size: 15px;
+      outline: none;
+      transition: border 0.2s;
+      margin-bottom: 20px;
+    }
+
+    .signup-card input:focus {
+      border-color: #4d6b8f;
+    }
+
+    .signup-card button {
+      width: 100%;
+      padding: 14px;
+      background: #2b3d54;
+      border: none;
+      border-radius: 14px;
+      color: white;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .signup-card button:hover {
+      background: #3d5877;
+    }
+
+    .signup-card .error-msg {
+      color: #ff6b6b;
+      font-size: 13px;
+      margin-top: -12px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .signup-card .error-msg.show {
+      display: block;
+    }
+
+    .app {
+      display: flex;
+      width: 1300px;
+      max-width: 100%;
+      height: 90vh;
+      max-height: 800px;
+      background: #14181c;
+      border-radius: 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+      overflow: hidden;
+      border: 1px solid #2a3138;
+    }
+
+    .sidebar {
+      width: 300px;
+      background: #0f1317;
+      border-right: 1px solid #232a30;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 20px 18px 12px;
+      border-bottom: 1px solid #1f262c;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .sidebar-header i {
+      color: #b0c7d9;
+      font-size: 20px;
+      background: #1f2a33;
+      padding: 8px;
+      border-radius: 12px;
+    }
+
+    .sidebar-header h2 {
+      color: #e8edf2;
+      font-weight: 500;
+      font-size: 18px;
+      letter-spacing: 0.3px;
+    }
+
+    .sidebar-header .user-badge {
+      margin-left: auto;
+      background: #1f2a33;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      color: #b0c7d9;
+    }
+
+    .create-group-btn {
+      margin: 8px 12px;
+      padding: 10px;
+      background: #1f2a33;
+      border: 1px solid #2b353f;
+      border-radius: 12px;
+      color: #b0c7d9;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .create-group-btn:hover {
+      background: #2b3d54;
+      border-color: #4d6b8f;
+      color: white;
+    }
+
+    .user-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 0;
+    }
+
+    .user-list::-webkit-scrollbar {
+      width: 4px;
+    }
+    .user-list::-webkit-scrollbar-thumb {
+      background: #2f3a45;
+      border-radius: 10px;
+    }
+
+    .user-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 20px;
+      margin: 2px 8px;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      color: #d6e0e8;
+    }
+
+    .user-item:hover {
+      background: #1d262e;
+    }
+
+    .user-item.active {
+      background: #1f2b36;
+      border-left: 3px solid #6c8cff;
+    }
+
+    .user-avatar {
+      width: 44px;
+      height: 44px;
+      background: #25313c;
+      border-radius: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 18px;
+      color: #b8d0e5;
+      flex-shrink: 0;
+      margin-right: 14px;
+      text-transform: uppercase;
+      box-shadow: inset 0 0 0 1px #33404d;
+    }
+
+    .user-name {
+      font-weight: 450;
+      font-size: 15px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .group-icon {
+      margin-right: 8px;
+      color: #6c8cff;
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #0f1317;
+    }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #667b8a;
+      background: #0f1317;
+    }
+
+    .empty-state i {
+      font-size: 56px;
+      color: #25323e;
+      margin-bottom: 18px;
+    }
+
+    .empty-state h3 {
+      font-weight: 400;
+      font-size: 22px;
+      color: #b2c9dc;
+      letter-spacing: 0.3px;
+    }
+
+    .empty-state p {
+      margin-top: 6px;
+      color: #526473;
+      font-size: 14px;
+    }
+
+    .chat-header {
+      padding: 18px 28px;
+      border-bottom: 1px solid #1f262c;
+      background: #11171c;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .chat-header .back-icon {
+      display: none;
+      color: #92aec9;
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .chat-header h2 {
+      font-weight: 450;
+      font-size: 18px;
+      color: #eef3f8;
+      letter-spacing: 0.2px;
+      flex: 1;
+    }
+
+    .chat-header h2 span {
+      color: #7fa3c7;
+      font-weight: 400;
+    }
+
+    .add-people-btn {
+      background: #1f2a33;
+      border: 1px solid #2b353f;
+      color: #b0c7d9;
+      padding: 6px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .add-people-btn:hover {
+      background: #2b3d54;
+      border-color: #4d6b8f;
+      color: white;
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 20px 28px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: #0f1317;
+    }
+
+    .chat-messages::-webkit-scrollbar {
+      width: 4px;
+    }
+    .chat-messages::-webkit-scrollbar-thumb {
+      background: #2b3744;
+      border-radius: 12px;
+    }
+
+    .message-wrapper {
+      display: flex;
+      flex-direction: column;
+      max-width: 70%;
+      align-self: flex-start;
+    }
+
+    .message-wrapper.self {
+      align-self: flex-end;
+    }
+
+    .message-sender {
+      font-size: 11px;
+      color: #6c8196;
+      margin-bottom: 2px;
+      padding-left: 4px;
+      font-weight: 500;
+    }
+
+    .message-bubble {
+      padding: 12px 18px;
+      border-radius: 22px;
+      background: #1b242c;
+      color: #dde6ef;
+      font-size: 14px;
+      line-height: 1.5;
+      word-break: break-word;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    }
+
+    .message-wrapper.self .message-bubble {
+      background: #2a3a4e;
+      color: #eaf0f7;
+    }
+
+    .message-input-area {
+      padding: 16px 24px 24px;
+      background: #0f1317;
+      border-top: 1px solid #1c242b;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .message-input-area input {
+      flex: 1;
+      background: #1b232b;
+      border: 1px solid #2b353f;
+      border-radius: 40px;
+      padding: 12px 20px;
+      color: #e4ecf5;
+      font-size: 14px;
+      outline: none;
+      transition: border 0.15s;
+    }
+
+    .message-input-area input:focus {
+      border-color: #4d6b8f;
+    }
+
+    .message-input-area button {
+      background: #2b3d54;
+      border: none;
+      color: white;
+      width: 48px;
+      height: 48px;
+      border-radius: 40px;
+      font-size: 20px;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .message-input-area button:hover {
+      background: #3d5877;
+    }
+
+    .message-input-area button:disabled {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-overlay.hidden {
+      display: none;
+    }
+
+    .modal {
+      background: #14181c;
+      border-radius: 24px;
+      padding: 32px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      border: 1px solid #2a3138;
+      overflow-y: auto;
+    }
+
+    .modal h3 {
+      color: #e8edf2;
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+
+    .modal input {
+      width: 100%;
+      padding: 12px 16px;
+      background: #1b232b;
+      border: 1px solid #2b353f;
+      border-radius: 12px;
+      color: #e4ecf5;
+      font-size: 14px;
+      outline: none;
+      margin-bottom: 16px;
+    }
+
+    .modal input:focus {
+      border-color: #4d6b8f;
+    }
+
+    .modal .modal-btn {
+      padding: 10px 20px;
+      background: #2b3d54;
+      border: none;
+      border-radius: 12px;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-size: 14px;
+    }
+
+    .modal .modal-btn:hover {
+      background: #3d5877;
+    }
+
+    .modal .modal-btn.cancel {
+      background: #2a2a2a;
+      margin-left: 8px;
+    }
+
+    .modal .modal-btn.cancel:hover {
+      background: #3a3a3a;
+    }
+
+    .user-list-modal {
+      max-height: 300px;
+      overflow-y: auto;
+      margin: 12px 0;
+    }
+
+    .user-list-modal::-webkit-scrollbar {
+      width: 4px;
+    }
+    .user-list-modal::-webkit-scrollbar-thumb {
+      background: #2f3a45;
+      border-radius: 10px;
+    }
+
+    .user-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 4px;
+      border-bottom: 1px solid #1f262c;
+      color: #d6e0e8;
+    }
+
+    .user-row .username {
+      font-size: 14px;
+    }
+
+    .user-row .action-btn {
+      padding: 4px 14px;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    .user-row .action-btn.add {
+      background: #2d7a4a;
+      color: white;
+    }
+
+    .user-row .action-btn.add:hover {
+      background: #3a9a5e;
+    }
+
+    .user-row .action-btn.remove {
+      background: #7a2d2d;
+      color: white;
+    }
+
+    .user-row .action-btn.remove:hover {
+      background: #9a3a3a;
+    }
+
+    @media (max-width: 700px) {
+      .app {
+        flex-direction: column;
+        height: 95vh;
+        max-height: none;
+      }
+      .sidebar {
+        width: 100%;
+        height: 40%;
+        border-right: none;
+        border-bottom: 1px solid #232a30;
+      }
+      .main {
+        height: 60%;
+      }
+      .chat-header .back-icon {
+        display: inline-block;
+      }
+    }
+
+    .text-muted {
+      color: #6c8196;
+    }
+  </style>
+</head>
+<body>
+  <!-- Sign-up Overlay -->
+  <div id="signupOverlay">
+    <div class="signup-card">
+      <h1>Welcome to Monoco</h1>
+      <p>Choose a username to start chatting</p>
+      <form id="signupForm">
+        <label for="usernameInput">Username</label>
+        <input type="text" id="usernameInput" placeholder="Enter your username..." autocomplete="off" required>
+        <div class="error-msg" id="signupError">This username is already taken. Please choose another.</div>
+        <button type="submit">Join Chat</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div class="app" id="app">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <i class="fas fa-comment-dots"></i>
+        <h2>Monoco · Chat</h2>
+        <span class="user-badge" id="userBadge">👤</span>
+      </div>
+      <button class="create-group-btn" id="createGroupBtn">
+        <i class="fas fa-users"></i> Create Group Chat
+      </button>
+      <div class="user-list" id="userList">
+        <!-- users rendered by JS -->
+      </div>
+    </div>
+
+    <div class="main" id="mainArea">
+      <div class="empty-state" id="emptyState">
+        <i class="fas fa-users"></i>
+        <h3>Pick someone to chat with!</h3>
+        <p>Select a user or group from the sidebar</p>
+      </div>
+
+      <div id="chatView" style="display: none; flex-direction: column; height: 100%;">
+        <div class="chat-header">
+          <i class="fas fa-arrow-left back-icon" id="backMobile"></i>
+          <h2 id="chatTitle">Messaging <span id="chatUsername">—</span></h2>
+          <button class="add-people-btn" id="addPeopleBtn" style="display: none;">
+            <i class="fas fa-user-plus"></i> Add People
+          </button>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+          <!-- messages appear here -->
+        </div>
+        <div class="message-input-area">
+          <input type="text" id="messageInput" placeholder="Type a message..." autocomplete="off">
+          <button id="sendBtn"><i class="fas fa-paper-plane"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal" id="modalContent">
+      <!-- Dynamic content -->
+    </div>
+  </div>
+
+  <script>
+    // ================================================================
+    // 1. SUPABASE CONFIG - UPDATE THESE WITH YOUR VALUES
+    // ================================================================
+    const 'https://gnfjouspyzuaekbwclpj.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_89ZxkSVxfQuAtkPYIvPZHw_eQ9IjBvk';
+
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ================================================================
+    // 2. STATE
+    // ================================================================
+    let currentUser = null;
+    let selectedChatId = null;
+    let selectedChatType = null;
+    let allUsers = [];
+    let allGroups = [];
+    let groupMembers = {};
+    let messages = [];
+    let currentGroupMembers = [];
+    let userMap = {};
+    let isDocumentVisible = true;
+
+    // DOM refs
+    const signupOverlay = document.getElementById('signupOverlay');
+    const signupForm = document.getElementById('signupForm');
+    const usernameInput = document.getElementById('usernameInput');
+    const signupError = document.getElementById('signupError');
+    const userBadge = document.getElementById('userBadge');
+    const userListEl = document.getElementById('userList');
+    const emptyState = document.getElementById('emptyState');
+    const chatView = document.getElementById('chatView');
+    const chatUsernameSpan = document.getElementById('chatUsername');
+    const chatTitle = document.getElementById('chatTitle');
+    const chatMessagesEl = document.getElementById('chatMessages');
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const backMobile = document.getElementById('backMobile');
+    const createGroupBtn = document.getElementById('createGroupBtn');
+    const addPeopleBtn = document.getElementById('addPeopleBtn');
+    const modalOverlay = document.getElementById('modalOverlay');
+    const modalContent = document.getElementById('modalContent');
+
+    let messageChannel = null;
+    let userChannel = null;
+    let groupChannel = null;
+    let memberChannel = null;
+
+    // ================================================================
+    // 3. NOTIFICATIONS
+    // ================================================================
+    function sendNotification(title, body) {
+      if (!isDocumentVisible && 'Notification' in window) {
+        if (Notification.permission === 'granted') {
+          try {
+            new Notification(title, { body: body, icon: '💬' });
+          } catch (e) {
+            console.log('Notification error:', e);
+          }
+        } else if (Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      isDocumentVisible = !document.hidden;
+    });
+
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    // ================================================================
+    // 4. SIGN-UP LOGIC
+    // ================================================================
+    signupForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = usernameInput.value.trim();
+      
+      if (!username) {
+        signupError.textContent = 'Username cannot be empty.';
+        signupError.classList.add('show');
+        return;
+      }
+
+      if (username.length < 2) {
+        signupError.textContent = 'Username must be at least 2 characters.';
+        signupError.classList.add('show');
+        return;
+      }
+
+      signupError.classList.remove('show');
+
+      try {
+        const { data: existing, error: fetchError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('username', username)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.error('Error checking username:', fetchError);
+          signupError.textContent = 'Database error. Please try again.';
+          signupError.classList.add('show');
+          return;
+        }
+
+        if (existing) {
+          signupError.textContent = 'This username is already taken. Please choose another.';
+          signupError.classList.add('show');
+          return;
+        }
+
+        const { data: newUser, error: insertError } = await supabase
+          .from('users')
+          .insert([{ username }])
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('Error creating user:', insertError);
+          signupError.textContent = 'Failed to create account. Please try again.';
+          signupError.classList.add('show');
+          return;
+        }
+
+        localStorage.setItem('messenger_username', username);
+        currentUser = newUser;
+        signupOverlay.classList.add('hidden');
+        userBadge.textContent = `👤 ${username}`;
+        
+        await initializeApp();
+
+      } catch (err) {
+        console.error('Signup error:', err);
+        signupError.textContent = 'An unexpected error occurred. Please try again.';
+        signupError.classList.add('show');
+      }
+    });
+
+    // ================================================================
+    // 5. CHECK EXISTING SESSION
+    // ================================================================
+    async function checkExistingSession() {
+      const storedUsername = localStorage.getItem('messenger_username');
+      if (!storedUsername) return false;
+
+      try {
+        const { data: user, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', storedUsername)
+          .maybeSingle();
+
+        if (error || !user) {
+          localStorage.removeItem('messenger_username');
+          return false;
+        }
+
+        currentUser = user;
+        userBadge.textContent = `👤 ${user.username}`;
+        signupOverlay.classList.add('hidden');
+        return true;
+      } catch (err) {
+        console.error('Session check error:', err);
+        return false;
+      }
+    }
+
+    // ================================================================
+    // 6. LOAD USERS & GROUPS
+    // ================================================================
+    async function loadUsers() {
+      if (!currentUser) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .neq('id', currentUser.id)
+          .order('username', { ascending: true });
+
+        if (error) {
+          console.error('Error loading users:', error);
+          return;
+        }
+        
+        allUsers = data || [];
+        allUsers.forEach(u => userMap[u.id] = u.username);
+        userMap[currentUser.id] = currentUser.username;
+        
+        await loadGroups();
+        renderUserList();
+      } catch (err) {
+        console.error('Load users error:', err);
+      }
+    }
+
+    async function loadGroups() {
+      if (!currentUser) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('groups')
+          .select('*')
+          .order('name', { ascending: true });
+
+        if (error) {
+          console.error('Error loading groups:', error);
+          return;
+        }
+
+        allGroups = data || [];
+        
+        for (let group of allGroups) {
+          const { data: members, error: memberError } = await supabase
+            .from('group_members')
+            .select('user_id')
+            .eq('group_id', group.id);
+
+          if (!memberError) {
+            groupMembers[group.id] = members.map(m => m.user_id);
+          }
+        }
+      } catch (err) {
+        console.error('Load groups error:', err);
+      }
+    }
+
+    // ================================================================
+    // 7. RENDER USER LIST
+    // ================================================================
+    function renderUserList() {
+      let html = '';
+
+      html += `<div style="padding: 8px 20px 4px; color: #6c8196; font-size: 12px; font-weight: 500;">DIRECT MESSAGES</div>`;
+      
+      allUsers.forEach(u => {
+        const activeClass = (selectedChatType === 'direct' && selectedChatId === u.id) ? 'active' : '';
+        const initial = u.username.charAt(0).toUpperCase();
+        html += `
+          <div class="user-item ${activeClass}" data-chattype="direct" data-chatid="${u.id}">
+            <div class="user-avatar">${initial}</div>
+            <div class="user-name">${u.username}</div>
+          </div>
+        `;
+      });
+
+      html += `<div style="padding: 16px 20px 4px; color: #6c8196; font-size: 12px; font-weight: 500;">GROUP CHATS</div>`;
+      
+      const userGroups = allGroups.filter(g => groupMembers[g.id] && groupMembers[g.id].includes(currentUser.id));
+      
+      if (userGroups.length === 0) {
+        html += `<div style="padding: 8px 20px; color: #5b6f7e; font-size: 13px;">No group chats yet</div>`;
+      } else {
+        userGroups.forEach(g => {
+          const activeClass = (selectedChatType === 'group' && selectedChatId === g.id) ? 'active' : '';
+          html += `
+            <div class="user-item ${activeClass}" data-chattype="group" data-chatid="${g.id}">
+              <i class="fas fa-users group-icon"></i>
+              <div class="user-name">${g.name}</div>
+            </div>
+          `;
+        });
+      }
+
+      userListEl.innerHTML = html;
+
+      document.querySelectorAll('.user-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const chatType = el.dataset.chattype;
+          const chatId = parseInt(el.dataset.chatid);
+          selectChat(chatType, chatId);
+        });
+      });
+    }
+
+    // ================================================================
+    // 8. SELECT CHAT
+    // ================================================================
+    async function selectChat(chatType, chatId) {
+      if (!currentUser) return;
+      
+      selectedChatType = chatType;
+      selectedChatId = chatId;
+      renderUserList();
+
+      emptyState.style.display = 'none';
+      chatView.style.display = 'flex';
+
+      if (chatType === 'direct') {
+        const user = allUsers.find(u => u.id === chatId);
+        chatUsernameSpan.textContent = user ? user.username : 'User';
+        chatTitle.innerHTML = `Messaging <span>${user ? user.username : 'User'}</span>`;
+        addPeopleBtn.style.display = 'none';
+        await loadMessages('direct', chatId);
+      } else if (chatType === 'group') {
+        const group = allGroups.find(g => g.id === chatId);
+        chatUsernameSpan.textContent = group ? group.name : 'Group';
+        chatTitle.innerHTML = `<span>${group ? group.name : 'Group'}</span>`;
+        
+        const isOwner = group && group.owner_id === currentUser.id;
+        addPeopleBtn.style.display = isOwner ? 'inline-block' : 'none';
+        
+        await loadGroupMembers(chatId);
+        await loadMessages('group', chatId);
+      }
+
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+    }
+
+    // ================================================================
+    // 9. LOAD GROUP MEMBERS
+    // ================================================================
+    async function loadGroupMembers(groupId) {
+      try {
+        const { data, error } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', groupId);
+
+        if (!error) {
+          currentGroupMembers = data.map(m => m.user_id);
+          groupMembers[groupId] = currentGroupMembers;
+        }
+      } catch (err) {
+        console.error('Load group members error:', err);
+      }
+    }
+
+    // ================================================================
+    // 10. MESSAGES
+    // ================================================================
+    async function loadMessages(chatType, chatId) {
+      if (!currentUser) return;
+      
+      try {
+        let query = supabase.from('messages').select('*');
+        
+        if (chatType === 'direct') {
+          query = query.or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+            .or(`sender_id.eq.${chatId},receiver_id.eq.${chatId}`);
+        } else if (chatType === 'group') {
+          query = query.eq('group_id', chatId);
+        }
+
+        const { data, error } = await query.order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('Error loading messages:', error);
+          return;
+        }
+        
+        messages = data || [];
+        renderMessages();
+      } catch (err) {
+        console.error('Load messages error:', err);
+      }
+    }
+
+    function renderMessages() {
+      chatMessagesEl.innerHTML = '';
+      if (!messages.length) {
+        chatMessagesEl.innerHTML = `<div class="text-muted" style="text-align:center; padding: 30px 0;">No messages yet. Say hi!</div>`;
+        return;
+      }
+
+      messages.forEach(msg => {
+        const isSelf = msg.sender_id === currentUser.id;
+        const wrapper = document.createElement('div');
+        wrapper.className = `message-wrapper ${isSelf ? 'self' : ''}`;
+        
+        const sender = document.createElement('div');
+        sender.className = 'message-sender';
+        const senderName = userMap[msg.sender_id] || 'Unknown';
+        sender.textContent = senderName;
+        
+        const bubble = document.createElement('div');
+        bubble.className = 'message-bubble';
+        bubble.textContent = msg.content;
+        
+        wrapper.appendChild(sender);
+        wrapper.appendChild(bubble);
+        chatMessagesEl.appendChild(wrapper);
+      });
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const content = messageInput.value.trim();
+      if (!content || !selectedChatId || !currentUser) return;
+
+      try {
+        const newMsg = {
+          sender_id: currentUser.id,
+          content: content,
+        };
+
+        if (selectedChatType === 'direct') {
+          newMsg.receiver_id = selectedChatId;
+        } else if (selectedChatType === 'group') {
+          newMsg.group_id = selectedChatId;
+        }
+
+        const { data, error } = await supabase
+          .from('messages')
+          .insert([newMsg])
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error sending message:', error);
+          alert('Failed to send message.');
+          return;
+        }
+
+        messageInput.value = '';
+        messages.push(data);
+        renderMessages();
+      } catch (err) {
+        console.error('Send message error:', err);
+      }
+    }
+
+    // ================================================================
+    // 11. REALTIME SUBSCRIPTIONS - COMPLETELY FIXED
+    // ================================================================
+    function setupSubscriptions() {
+      // Clean up existing subscriptions
+      if (messageChannel) {
+        supabase.removeChannel(messageChannel);
+        messageChannel = null;
+      }
+      if (userChannel) {
+        supabase.removeChannel(userChannel);
+        userChannel = null;
+      }
+      if (groupChannel) {
+        supabase.removeChannel(groupChannel);
+        groupChannel = null;
+      }
+      if (memberChannel) {
+        supabase.removeChannel(memberChannel);
+        memberChannel = null;
+      }
+
+      // ============================================================
+      // USER SUBSCRIPTION - NEW USERS
+      // ============================================================
+      userChannel = supabase
+        .channel('users-channel')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'users'
+          },
+          async (payload) => {
+            console.log('🆕 New user detected:', payload.new);
+            
+            // Add the new user to our local state
+            const newUser = payload.new;
+            if (newUser.id !== currentUser.id) {
+              // Check if user already exists in our list
+              const exists = allUsers.some(u => u.id === newUser.id);
+              if (!exists) {
+                allUsers.push(newUser);
+                userMap[newUser.id] = newUser.username;
+                renderUserList();
+                console.log('✅ User list updated with new user');
+              }
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log('📡 User subscription status:', status);
+        });
+
+      // ============================================================
+      // GROUP SUBSCRIPTION - NEW GROUPS
+      // ============================================================
+      groupChannel = supabase
+        .channel('groups-channel')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'groups'
+          },
+          async (payload) => {
+            console.log('🆕 New group detected:', payload.new);
+            
+            // Add the new group to our local state
+            const newGroup = payload.new;
+            
+            // Check if the current user is a member of this group
+            // We need to check group_members
+            const { data: members, error } = await supabase
+              .from('group_members')
+              .select('user_id')
+              .eq('group_id', newGroup.id);
+
+            if (!error && members) {
+              groupMembers[newGroup.id] = members.map(m => m.user_id);
+              
+              // If current user is a member, add to groups list
+              if (members.some(m => m.user_id === currentUser.id)) {
+                const exists = allGroups.some(g => g.id === newGroup.id);
+                if (!exists) {
+                  allGroups.push(newGroup);
+                  renderUserList();
+                  console.log('✅ Group list updated with new group');
+                }
+              }
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log('📡 Group subscription status:', status);
+        });
+
+      // ============================================================
+      // GROUP MEMBERS SUBSCRIPTION
+      // ============================================================
+      memberChannel = supabase
+        .channel('members-channel')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'group_members'
+          },
+          async (payload) => {
+            console.log('🔄 Group member change detected:', payload);
+            
+            const groupId = payload.new?.group_id || payload.old?.group_id;
+            
+            if (groupId) {
+              // Reload members for this group
+              const { data: members, error } = await supabase
+                .from('group_members')
+                .select('user_id')
+                .eq('group_id', groupId);
+
+              if (!error) {
+                groupMembers[groupId] = members.map(m => m.user_id);
+                
+                // Check if current user is in this group
+                const isMember = members.some(m => m.user_id === currentUser.id);
+                const group = allGroups.find(g => g.id === groupId);
+                
+                if (group) {
+                  if (isMember) {
+                    // User was added to group
+                    const exists = allGroups.some(g => g.id === groupId);
+                    if (!exists) {
+                      allGroups.push(group);
+                    }
+                  } else {
+                    // User was removed from group
+                    const index = allGroups.findIndex(g => g.id === groupId);
+                    if (index !== -1) {
+                      allGroups.splice(index, 1);
+                      
+                      // If currently in this chat, close it
+                      if (selectedChatType === 'group' && selectedChatId === groupId) {
+                        selectedChatId = null;
+                        selectedChatType = null;
+                        emptyState.style.display = 'flex';
+                        chatView.style.display = 'none';
+                        alert('You have been removed from this group chat.');
+                      }
+                    }
+                  }
+                  renderUserList();
+                  console.log('✅ Group list updated with member change');
+                }
+              }
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log('📡 Member subscription status:', status);
+        });
+
+      // ============================================================
+      // MESSAGE SUBSCRIPTION
+      // ============================================================
+      messageChannel = supabase
+        .channel('messages-channel')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'messages'
+          },
+          (payload) => {
+            const newMsg = payload.new;
+            console.log('💬 New message received:', newMsg);
+            
+            // Check if this message is for the current user
+            let isForCurrentUser = false;
+            
+            // Direct message
+            if (newMsg.receiver_id && !newMsg.group_id) {
+              if (newMsg.receiver_id === currentUser.id || newMsg.sender_id === currentUser.id) {
+                isForCurrentUser = true;
+              }
+            }
+            // Group message
+            else if (newMsg.group_id) {
+              // Check if user is in this group
+              if (groupMembers[newMsg.group_id] && groupMembers[newMsg.group_id].includes(currentUser.id)) {
+                isForCurrentUser = true;
+              }
+            }
+            
+            if (isForCurrentUser) {
+              // If this is the currently selected chat, add the message
+              if (selectedChatType === 'direct' && (newMsg.receiver_id === selectedChatId || newMsg.sender_id === selectedChatId)) {
+                const exists = messages.some(m => m.id === newMsg.id);
+                if (!exists) {
+                  messages.push(newMsg);
+                  renderMessages();
+                }
+              } else if (selectedChatType === 'group' && newMsg.group_id === selectedChatId) {
+                const exists = messages.some(m => m.id === newMsg.id);
+                if (!exists) {
+                  messages.push(newMsg);
+                  renderMessages();
+                }
+              }
+              
+              // Send notification if not from current user and tab is hidden
+              if (!isDocumentVisible && newMsg.sender_id !== currentUser.id) {
+                const senderName = userMap[newMsg.sender_id] || 'Unknown';
+                let title = senderName;
+                let body = newMsg.content;
+                
+                if (newMsg.group_id) {
+                  const group = allGroups.find(g => g.id === newMsg.group_id);
+                  title = `${senderName} in ${group?.name || 'Group'}`;
+                }
+                
+                sendNotification(title, body);
+              }
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log('📡 Message subscription status:', status);
+        });
+    }
+
+    // ================================================================
+    // 12. CREATE GROUP CHAT
+    // ================================================================
+    createGroupBtn.addEventListener('click', () => {
+      showCreateGroupModal();
+    });
+
+    function showCreateGroupModal() {
+      modalContent.innerHTML = `
+        <h3><i class="fas fa-users"></i> Create Group Chat</h3>
+        <input type="text" id="groupNameInput" placeholder="Group name..." autocomplete="off">
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px;">
+          <button class="modal-btn cancel" onclick="closeModal()">Cancel</button>
+          <button class="modal-btn" id="confirmCreateGroup">Create</button>
+        </div>
+        <div id="groupError" style="color: #ff6b6b; font-size: 13px; margin-top: 8px; display: none;"></div>
+      `;
+      
+      modalOverlay.classList.remove('hidden');
+
+      document.getElementById('confirmCreateGroup').addEventListener('click', async () => {
+        const name = document.getElementById('groupNameInput').value.trim();
+        const errorEl = document.getElementById('groupError');
+        
+        if (!name) {
+          errorEl.textContent = 'Group name cannot be empty.';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        const { data: existing, error: fetchError } = await supabase
+          .from('groups')
+          .select('id')
+          .eq('name', name)
+          .maybeSingle();
+
+        if (fetchError) {
+          errorEl.textContent = 'Database error. Please try again.';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        if (existing) {
+          errorEl.textContent = 'A group with this name already exists.';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        const { data: newGroup, error: insertError } = await supabase
+          .from('groups')
+          .insert([{ name, owner_id: currentUser.id }])
+          .select()
+          .single();
+
+        if (insertError) {
+          errorEl.textContent = 'Failed to create group. Please try again.';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        await supabase
+          .from('group_members')
+          .insert([{ group_id: newGroup.id, user_id: currentUser.id }]);
+
+        closeModal();
+        await loadGroups();
+        renderUserList();
+        selectChat('group', newGroup.id);
+      });
+    }
+
+    // ================================================================
+    // 13. ADD/REMOVE PEOPLE
+    // ================================================================
+    addPeopleBtn.addEventListener('click', () => {
+      showManageMembersModal();
+    });
+
+    async function showManageMembersModal() {
+      if (!selectedChatId || selectedChatType !== 'group') return;
+      
+      await loadGroupMembers(selectedChatId);
+      
+      let html = `
+        <h3><i class="fas fa-user-plus"></i> Manage Group Members</h3>
+        <div class="user-list-modal">
+      `;
+
+      for (let user of allUsers) {
+        const isMember = currentGroupMembers.includes(user.id);
+        const actionBtn = isMember 
+          ? `<button class="action-btn remove" data-userid="${user.id}">Remove</button>`
+          : `<button class="action-btn add" data-userid="${user.id}">Add</button>`;
+        
+        html += `
+          <div class="user-row">
+            <span class="username">${user.username}</span>
+            ${actionBtn}
+          </div>
+        `;
+      }
+
+      html += `</div><div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px;">
+        <button class="modal-btn cancel" onclick="closeModal()">Close</button>
+      </div>`;
+
+      modalContent.innerHTML = html;
+      modalOverlay.classList.remove('hidden');
+
+      document.querySelectorAll('.action-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const userId = parseInt(btn.dataset.userid);
+          const isAdd = btn.classList.contains('add');
+          
+          if (isAdd) {
+            await supabase
+              .from('group_members')
+              .insert([{ group_id: selectedChatId, user_id: userId }]);
+          } else {
+            await supabase
+              .from('group_members')
+              .delete()
+              .eq('group_id', selectedChatId)
+              .eq('user_id', userId);
+          }
+          
+          await showManageMembersModal();
+          await loadGroups();
+          renderUserList();
+        });
+      });
+    }
+
+    // ================================================================
+    // 14. MODAL HELPERS
+    // ================================================================
+    window.closeModal = function() {
+      modalOverlay.classList.add('hidden');
+    };
+
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) {
+        closeModal();
+      }
+    });
+
+    // ================================================================
+    // 15. INITIALIZE APP
+    // ================================================================
+    async function initializeApp() {
+      await loadUsers();
+      setupSubscriptions();
+
+      sendBtn.addEventListener('click', sendMessage);
+      messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+      });
+
+      backMobile.addEventListener('click', () => {
+        selectedChatId = null;
+        selectedChatType = null;
+        emptyState.style.display = 'flex';
+        chatView.style.display = 'none';
+        renderUserList();
+      });
+
+      if (!selectedChatId) {
+        emptyState.style.display = 'flex';
+        chatView.style.display = 'none';
+      }
+    }
+
+    // ================================================================
+    // 16. BOOT
+    // ================================================================
+    (async function boot() {
+      try {
+        const hasSession = await checkExistingSession();
+        if (hasSession) {
+          await initializeApp();
+        }
+      } catch (err) {
+        console.error('Boot error:', err);
+        signupOverlay.classList.remove('hidden');
+      }
+    })();
+  </script>
+</body>
+</html>
