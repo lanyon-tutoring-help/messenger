@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  </title>Messenger</title>
+  <title>Messenger</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <style>
@@ -219,6 +219,7 @@
       cursor: pointer;
       transition: background 0.15s, transform 0.1s;
       color: #d6e0e8;
+      position: relative;
     }
 
     .user-item:hover {
@@ -228,6 +229,12 @@
     .user-item.active {
       background: #1f2b36;
       border-left: 3px solid #6c8cff;
+    }
+
+    .user-avatar-wrapper {
+      position: relative;
+      margin-right: 14px;
+      flex-shrink: 0;
     }
 
     .user-avatar {
@@ -241,10 +248,27 @@
       font-weight: 600;
       font-size: 18px;
       color: #b8d0e5;
-      flex-shrink: 0;
-      margin-right: 14px;
       text-transform: uppercase;
       box-shadow: inset 0 0 0 1px #33404d;
+    }
+
+    .status-dot {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid #0f1317;
+      transition: background-color 0.3s;
+    }
+
+    .status-dot.online {
+      background-color: #4caf50;
+    }
+
+    .status-dot.offline {
+      background-color: #6c8196;
     }
 
     .user-name {
@@ -253,6 +277,7 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      flex: 1;
     }
 
     .group-icon {
@@ -602,7 +627,7 @@
   <!-- Sign-up Overlay -->
   <div id="signupOverlay">
     <div class="signup-card">
-      <h1>Welcome to Messenger</h1>
+      <h1>Messenger</h1>
       <p>Choose a username to start chatting</p>
       <form id="signupForm">
         <label for="usernameInput">Username</label>
@@ -683,7 +708,9 @@
     let messages = [];
     let currentGroupMembers = [];
     let userMap = {};
+    let userStatus = {};
     let isDocumentVisible = true;
+    let statusUpdateInterval = null;
 
     // DOM refs
     const signupOverlay = document.getElementById('signupOverlay');
@@ -709,6 +736,7 @@
     let userChannel = null;
     let groupChannel = null;
     let memberChannel = null;
+    let statusChannel = null;
 
     // ================================================================
     // 3. NOTIFICATIONS
@@ -729,6 +757,7 @@
 
     document.addEventListener('visibilitychange', () => {
       isDocumentVisible = !document.hidden;
+      updateUserStatus();
     });
 
     if ('Notification' in window && Notification.permission === 'default') {
@@ -736,7 +765,91 @@
     }
 
     // ================================================================
-    // 4. SIGN-UP LOGIC
+    // 4. USER STATUS MANAGEMENT
+    // ================================================================
+    async function updateUserStatus() {
+      if (!currentUser) return;
+      
+      try {
+        const isOnline = isDocumentVisible;
+        const { error } = await supabase
+          .from('users')
+          .update({ 
+            is_online: isOnline,
+            last_seen: new Date().toISOString()
+          })
+          .eq('id', currentUser.id);
+
+        if (error) {
+          console.error('Error updating status:', error);
+        }
+      } catch (err) {
+        console.error('Status update error:', err);
+      }
+    }
+
+    async function loadUserStatuses() {
+      if (!currentUser) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, is_online, last_seen')
+          .neq('id', currentUser.id);
+
+        if (error) {
+          console.error('Error loading user statuses:', error);
+          return;
+        }
+
+        data.forEach(user => {
+          const lastSeen = new Date(user.last_seen);
+          const now = new Date();
+          const diffSeconds = (now - lastSeen) / 1000;
+          const isActuallyOnline = user.is_online && diffSeconds < 30;
+          
+          userStatus[user.id] = isActuallyOnline;
+        });
+
+        renderUserList();
+      } catch (err) {
+        console.error('Load statuses error:', err);
+      }
+    }
+
+    // ================================================================
+    // 5. CASE-INSENSITIVE VALIDATION FUNCTIONS
+    // ================================================================
+    async function isUsernameTaken(username) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('username', username);
+
+      if (error) {
+        console.error('Error checking username:', error);
+        return false;
+      }
+
+      return data && data.length > 0;
+    }
+
+    async function isGroupNameTaken(groupName) {
+      const { data, error } = await supabase
+        .from('groups')
+        .select('id')
+        .ilike('name', groupName);
+
+      if (error) {
+        console.error('Error checking group name:', error);
+        return false;
+      }
+
+      return data && data.length > 0;
+    }
+
+    // ================================================================
+    // 6. SIGN-UP LOGIC WITH CASE-INSENSITIVE CHECK
     // ================================================================
     signupForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -755,31 +868,24 @@
         return;
       }
 
+      // Check for case-insensitive duplicates
+      const taken = await isUsernameTaken(username);
+      if (taken) {
+        signupError.textContent = 'This username is already taken (case-insensitive). Please choose another.';
+        signupError.classList.add('show');
+        return;
+      }
+
       signupError.classList.remove('show');
 
       try {
-        const { data: existing, error: fetchError } = await supabase
-          .from('users')
-          .select('id')
-          .eq('username', username)
-          .maybeSingle();
-
-        if (fetchError) {
-          console.error('Error checking username:', fetchError);
-          signupError.textContent = 'Database error. Please try again.';
-          signupError.classList.add('show');
-          return;
-        }
-
-        if (existing) {
-          signupError.textContent = 'This username is already taken. Please choose another.';
-          signupError.classList.add('show');
-          return;
-        }
-
         const { data: newUser, error: insertError } = await supabase
           .from('users')
-          .insert([{ username }])
+          .insert([{ 
+            username: username,
+            is_online: true,
+            last_seen: new Date().toISOString()
+          }])
           .select()
           .single();
 
@@ -790,6 +896,7 @@
           return;
         }
 
+        // Store the EXACT username as it was entered (original case)
         localStorage.setItem('messenger_username', username);
         currentUser = newUser;
         signupOverlay.classList.add('hidden');
@@ -805,27 +912,52 @@
     });
 
     // ================================================================
-    // 5. CHECK EXISTING SESSION
+    // 7. CHECK EXISTING SESSION - FIXED AUTO-LOGIN
     // ================================================================
     async function checkExistingSession() {
       const storedUsername = localStorage.getItem('messenger_username');
       if (!storedUsername) return false;
 
       try {
-        const { data: user, error } = await supabase
+        // Use ilike for case-insensitive lookup
+        const { data: users, error } = await supabase
           .from('users')
           .select('*')
-          .eq('username', storedUsername)
-          .maybeSingle();
+          .ilike('username', storedUsername);
 
-        if (error || !user) {
+        if (error) {
+          console.error('Error checking session:', error);
+          return false;
+        }
+
+        // If no user found, clear storage and return false
+        if (!users || users.length === 0) {
           localStorage.removeItem('messenger_username');
           return false;
+        }
+
+        // Get the first matching user (should only be one due to unique constraint)
+        const user = users[0];
+        
+        // Update the stored username to match the database's version
+        // This ensures case consistency
+        if (user.username !== storedUsername) {
+          localStorage.setItem('messenger_username', user.username);
         }
 
         currentUser = user;
         userBadge.textContent = `👤 ${user.username}`;
         signupOverlay.classList.add('hidden');
+        
+        // Set user as online
+        await supabase
+          .from('users')
+          .update({ 
+            is_online: true,
+            last_seen: new Date().toISOString()
+          })
+          .eq('id', currentUser.id);
+          
         return true;
       } catch (err) {
         console.error('Session check error:', err);
@@ -834,7 +966,7 @@
     }
 
     // ================================================================
-    // 6. LOAD USERS & GROUPS
+    // 8. LOAD USERS & GROUPS
     // ================================================================
     async function loadUsers() {
       if (!currentUser) return;
@@ -856,6 +988,7 @@
         userMap[currentUser.id] = currentUser.username;
         
         await loadGroups();
+        await loadUserStatuses();
         renderUserList();
       } catch (err) {
         console.error('Load users error:', err);
@@ -894,7 +1027,7 @@
     }
 
     // ================================================================
-    // 7. RENDER USER LIST
+    // 9. RENDER USER LIST WITH STATUS
     // ================================================================
     function renderUserList() {
       let html = '';
@@ -904,9 +1037,14 @@
       allUsers.forEach(u => {
         const activeClass = (selectedChatType === 'direct' && selectedChatId === u.id) ? 'active' : '';
         const initial = u.username.charAt(0).toUpperCase();
+        const isOnline = userStatus[u.id] || false;
+        
         html += `
           <div class="user-item ${activeClass}" data-chattype="direct" data-chatid="${u.id}">
-            <div class="user-avatar">${initial}</div>
+            <div class="user-avatar-wrapper">
+              <div class="user-avatar">${initial}</div>
+              <div class="status-dot ${isOnline ? 'online' : 'offline'}"></div>
+            </div>
             <div class="user-name">${u.username}</div>
           </div>
         `;
@@ -942,7 +1080,7 @@
     }
 
     // ================================================================
-    // 8. SELECT CHAT
+    // 10. SELECT CHAT
     // ================================================================
     async function selectChat(chatType, chatId) {
       if (!currentUser) return;
@@ -976,7 +1114,7 @@
     }
 
     // ================================================================
-    // 9. LOAD GROUP MEMBERS
+    // 11. LOAD GROUP MEMBERS
     // ================================================================
     async function loadGroupMembers(groupId) {
       try {
@@ -995,7 +1133,7 @@
     }
 
     // ================================================================
-    // 10. MESSAGES
+    // 12. MESSAGES
     // ================================================================
     async function loadMessages(chatType, chatId) {
       if (!currentUser) return;
@@ -1089,7 +1227,7 @@
     }
 
     // ================================================================
-    // 11. REALTIME SUBSCRIPTIONS - FIXED BOTH ADD AND REMOVE
+    // 13. REALTIME SUBSCRIPTIONS WITH STATUS
     // ================================================================
     function setupSubscriptions() {
       // Clean up existing subscriptions
@@ -1109,6 +1247,35 @@
         supabase.removeChannel(memberChannel);
         memberChannel = null;
       }
+      if (statusChannel) {
+        supabase.removeChannel(statusChannel);
+        statusChannel = null;
+      }
+
+      // USER STATUS SUBSCRIPTION
+      statusChannel = supabase
+        .channel('status-channel')
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'users'
+          },
+          (payload) => {
+            const updatedUser = payload.new;
+            if (updatedUser.id !== currentUser.id) {
+              const lastSeen = new Date(updatedUser.last_seen);
+              const now = new Date();
+              const diffSeconds = (now - lastSeen) / 1000;
+              const isOnline = updatedUser.is_online && diffSeconds < 30;
+              
+              userStatus[updatedUser.id] = isOnline;
+              renderUserList();
+            }
+          }
+        )
+        .subscribe();
 
       // USER SUBSCRIPTION - NEW USERS
       userChannel = supabase
@@ -1129,6 +1296,7 @@
               if (!exists) {
                 allUsers.push(newUser);
                 userMap[newUser.id] = newUser.username;
+                userStatus[newUser.id] = newUser.is_online || false;
                 renderUserList();
                 console.log('✅ User list updated with new user');
               }
@@ -1173,7 +1341,7 @@
         )
         .subscribe();
 
-      // GROUP MEMBERS SUBSCRIPTION - FIXED FOR BOTH ADD AND REMOVE
+      // GROUP MEMBERS SUBSCRIPTION
       memberChannel = supabase
         .channel('members-channel')
         .on(
@@ -1189,18 +1357,15 @@
             const groupId = payload.old?.group_id;
             const userId = payload.old?.user_id;
             
-            // Check if the removed user is the current user
             if (userId === currentUser.id && groupId) {
               console.log('⚠️ You were removed from a group!');
               
-              // Remove the group from allGroups
               const index = allGroups.findIndex(g => g.id === groupId);
               if (index !== -1) {
                 const removedGroup = allGroups[index];
                 allGroups.splice(index, 1);
                 console.log(`❌ Removed group "${removedGroup.name}" from your list`);
                 
-                // Update groupMembers
                 if (groupMembers[groupId]) {
                   const memberIndex = groupMembers[groupId].indexOf(currentUser.id);
                   if (memberIndex !== -1) {
@@ -1208,7 +1373,6 @@
                   }
                 }
                 
-                // If currently in this group chat, go to empty state
                 if (selectedChatType === 'group' && selectedChatId === groupId) {
                   selectedChatId = null;
                   selectedChatType = null;
@@ -1217,7 +1381,6 @@
                   console.log('👋 You were in the removed group, returning to empty state');
                 }
                 
-                // Immediately re-render the user list
                 renderUserList();
               }
             }
@@ -1236,11 +1399,9 @@
             const groupId = payload.new?.group_id;
             const userId = payload.new?.user_id;
             
-            // Check if the added user is the current user
             if (userId === currentUser.id && groupId) {
               console.log('✅ You were added to a group!');
               
-              // Check if group exists in our list
               const group = allGroups.find(g => g.id === groupId);
               if (group) {
                 const exists = allGroups.some(g => g.id === groupId);
@@ -1248,7 +1409,6 @@
                   allGroups.push(group);
                 }
                 
-                // Update groupMembers
                 if (!groupMembers[groupId]) {
                   groupMembers[groupId] = [];
                 }
@@ -1256,7 +1416,6 @@
                   groupMembers[groupId].push(currentUser.id);
                 }
                 
-                // Re-render the user list
                 renderUserList();
                 console.log(`✅ Added group "${group.name}" to your list`);
               }
@@ -1326,7 +1485,7 @@
     }
 
     // ================================================================
-    // 12. CREATE GROUP CHAT
+    // 14. CREATE GROUP CHAT WITH CASE-INSENSITIVE CHECK
     // ================================================================
     createGroupBtn.addEventListener('click', () => {
       showCreateGroupModal();
@@ -1355,27 +1514,19 @@
           return;
         }
 
-        const { data: existing, error: fetchError } = await supabase
-          .from('groups')
-          .select('id')
-          .eq('name', name)
-          .maybeSingle();
-
-        if (fetchError) {
-          errorEl.textContent = 'Database error. Please try again.';
+        // Check for case-insensitive duplicates
+        const taken = await isGroupNameTaken(name);
+        if (taken) {
+          errorEl.textContent = 'A group with this name already exists (case-insensitive). Please choose another.';
           errorEl.style.display = 'block';
           return;
         }
 
-        if (existing) {
-          errorEl.textContent = 'A group with this name already exists.';
-          errorEl.style.display = 'block';
-          return;
-        }
+        errorEl.style.display = 'none';
 
         const { data: newGroup, error: insertError } = await supabase
           .from('groups')
-          .insert([{ name, owner_id: currentUser.id }])
+          .insert([{ name: name, owner_id: currentUser.id }])
           .select()
           .single();
 
@@ -1397,7 +1548,7 @@
     }
 
     // ================================================================
-    // 13. ADD/REMOVE PEOPLE
+    // 15. ADD/REMOVE PEOPLE
     // ================================================================
     addPeopleBtn.addEventListener('click', () => {
       showManageMembersModal();
@@ -1459,7 +1610,7 @@
     }
 
     // ================================================================
-    // 14. MODAL HELPERS
+    // 16. MODAL HELPERS
     // ================================================================
     window.closeModal = function() {
       modalOverlay.classList.add('hidden');
@@ -1472,7 +1623,7 @@
     });
 
     // ================================================================
-    // 15. INITIALIZE APP
+    // 17. INITIALIZE APP
     // ================================================================
     async function initializeApp() {
       await loadUsers();
@@ -1495,10 +1646,32 @@
         emptyState.style.display = 'flex';
         chatView.style.display = 'none';
       }
+
+      statusUpdateInterval = setInterval(updateUserStatus, 10000);
+      await updateUserStatus();
     }
 
     // ================================================================
-    // 16. BOOT
+    // 18. CLEANUP ON UNLOAD
+    // ================================================================
+    window.addEventListener('beforeunload', async () => {
+      if (statusUpdateInterval) {
+        clearInterval(statusUpdateInterval);
+      }
+      
+      if (currentUser) {
+        await supabase
+          .from('users')
+          .update({ 
+            is_online: false,
+            last_seen: new Date().toISOString()
+          })
+          .eq('id', currentUser.id);
+      }
+    });
+
+    // ================================================================
+    // 19. BOOT
     // ================================================================
     (async function boot() {
       try {
