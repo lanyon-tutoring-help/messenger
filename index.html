@@ -664,9 +664,9 @@
 
   <script>
     // ================================================================
-    // 1. SUPABASE CONFIG - UPDATE THESE WITH YOUR VALUES
+    // 1. SUPABASE CONFIG - YOUR CREDENTIALS FILLED IN
     // ================================================================
-    const 'https://gnfjouspyzuaekbwclpj.supabase.co';
+    const SUPABASE_URL = 'https://gnfjouspyzuaekbwclpj.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_89ZxkSVxfQuAtkPYIvPZHw_eQ9IjBvk';
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -740,6 +740,7 @@
     // ================================================================
     signupForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      
       const username = usernameInput.value.trim();
       
       if (!username) {
@@ -1088,7 +1089,7 @@
     }
 
     // ================================================================
-    // 11. REALTIME SUBSCRIPTIONS - COMPLETELY FIXED
+    // 11. REALTIME SUBSCRIPTIONS - FIXED BOTH ADD AND REMOVE
     // ================================================================
     function setupSubscriptions() {
       // Clean up existing subscriptions
@@ -1109,9 +1110,7 @@
         memberChannel = null;
       }
 
-      // ============================================================
       // USER SUBSCRIPTION - NEW USERS
-      // ============================================================
       userChannel = supabase
         .channel('users-channel')
         .on(
@@ -1124,10 +1123,8 @@
           async (payload) => {
             console.log('🆕 New user detected:', payload.new);
             
-            // Add the new user to our local state
             const newUser = payload.new;
             if (newUser.id !== currentUser.id) {
-              // Check if user already exists in our list
               const exists = allUsers.some(u => u.id === newUser.id);
               if (!exists) {
                 allUsers.push(newUser);
@@ -1138,13 +1135,9 @@
             }
           }
         )
-        .subscribe((status) => {
-          console.log('📡 User subscription status:', status);
-        });
+        .subscribe();
 
-      // ============================================================
       // GROUP SUBSCRIPTION - NEW GROUPS
-      // ============================================================
       groupChannel = supabase
         .channel('groups-channel')
         .on(
@@ -1157,11 +1150,8 @@
           async (payload) => {
             console.log('🆕 New group detected:', payload.new);
             
-            // Add the new group to our local state
             const newGroup = payload.new;
             
-            // Check if the current user is a member of this group
-            // We need to check group_members
             const { data: members, error } = await supabase
               .from('group_members')
               .select('user_id')
@@ -1170,7 +1160,6 @@
             if (!error && members) {
               groupMembers[newGroup.id] = members.map(m => m.user_id);
               
-              // If current user is a member, add to groups list
               if (members.some(m => m.user_id === currentUser.id)) {
                 const exists = allGroups.some(g => g.id === newGroup.id);
                 if (!exists) {
@@ -1182,78 +1171,101 @@
             }
           }
         )
-        .subscribe((status) => {
-          console.log('📡 Group subscription status:', status);
-        });
+        .subscribe();
 
-      // ============================================================
-      // GROUP MEMBERS SUBSCRIPTION
-      // ============================================================
+      // GROUP MEMBERS SUBSCRIPTION - FIXED FOR BOTH ADD AND REMOVE
       memberChannel = supabase
         .channel('members-channel')
         .on(
           'postgres_changes',
           {
-            event: '*',
+            event: 'DELETE',
             schema: 'public',
             table: 'group_members'
           },
           async (payload) => {
-            console.log('🔄 Group member change detected:', payload);
+            console.log('🔴 Group member removed:', payload);
             
-            const groupId = payload.new?.group_id || payload.old?.group_id;
+            const groupId = payload.old?.group_id;
+            const userId = payload.old?.user_id;
             
-            if (groupId) {
-              // Reload members for this group
-              const { data: members, error } = await supabase
-                .from('group_members')
-                .select('user_id')
-                .eq('group_id', groupId);
-
-              if (!error) {
-                groupMembers[groupId] = members.map(m => m.user_id);
+            // Check if the removed user is the current user
+            if (userId === currentUser.id && groupId) {
+              console.log('⚠️ You were removed from a group!');
+              
+              // Remove the group from allGroups
+              const index = allGroups.findIndex(g => g.id === groupId);
+              if (index !== -1) {
+                const removedGroup = allGroups[index];
+                allGroups.splice(index, 1);
+                console.log(`❌ Removed group "${removedGroup.name}" from your list`);
                 
-                // Check if current user is in this group
-                const isMember = members.some(m => m.user_id === currentUser.id);
-                const group = allGroups.find(g => g.id === groupId);
-                
-                if (group) {
-                  if (isMember) {
-                    // User was added to group
-                    const exists = allGroups.some(g => g.id === groupId);
-                    if (!exists) {
-                      allGroups.push(group);
-                    }
-                  } else {
-                    // User was removed from group
-                    const index = allGroups.findIndex(g => g.id === groupId);
-                    if (index !== -1) {
-                      allGroups.splice(index, 1);
-                      
-                      // If currently in this chat, close it
-                      if (selectedChatType === 'group' && selectedChatId === groupId) {
-                        selectedChatId = null;
-                        selectedChatType = null;
-                        emptyState.style.display = 'flex';
-                        chatView.style.display = 'none';
-                        alert('You have been removed from this group chat.');
-                      }
-                    }
+                // Update groupMembers
+                if (groupMembers[groupId]) {
+                  const memberIndex = groupMembers[groupId].indexOf(currentUser.id);
+                  if (memberIndex !== -1) {
+                    groupMembers[groupId].splice(memberIndex, 1);
                   }
-                  renderUserList();
-                  console.log('✅ Group list updated with member change');
                 }
+                
+                // If currently in this group chat, go to empty state
+                if (selectedChatType === 'group' && selectedChatId === groupId) {
+                  selectedChatId = null;
+                  selectedChatType = null;
+                  emptyState.style.display = 'flex';
+                  chatView.style.display = 'none';
+                  console.log('👋 You were in the removed group, returning to empty state');
+                }
+                
+                // Immediately re-render the user list
+                renderUserList();
               }
             }
           }
         )
-        .subscribe((status) => {
-          console.log('📡 Member subscription status:', status);
-        });
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'group_members'
+          },
+          async (payload) => {
+            console.log('🟢 Group member added:', payload);
+            
+            const groupId = payload.new?.group_id;
+            const userId = payload.new?.user_id;
+            
+            // Check if the added user is the current user
+            if (userId === currentUser.id && groupId) {
+              console.log('✅ You were added to a group!');
+              
+              // Check if group exists in our list
+              const group = allGroups.find(g => g.id === groupId);
+              if (group) {
+                const exists = allGroups.some(g => g.id === groupId);
+                if (!exists) {
+                  allGroups.push(group);
+                }
+                
+                // Update groupMembers
+                if (!groupMembers[groupId]) {
+                  groupMembers[groupId] = [];
+                }
+                if (!groupMembers[groupId].includes(currentUser.id)) {
+                  groupMembers[groupId].push(currentUser.id);
+                }
+                
+                // Re-render the user list
+                renderUserList();
+                console.log(`✅ Added group "${group.name}" to your list`);
+              }
+            }
+          }
+        )
+        .subscribe();
 
-      // ============================================================
       // MESSAGE SUBSCRIPTION
-      // ============================================================
       messageChannel = supabase
         .channel('messages-channel')
         .on(
@@ -1267,25 +1279,20 @@
             const newMsg = payload.new;
             console.log('💬 New message received:', newMsg);
             
-            // Check if this message is for the current user
             let isForCurrentUser = false;
             
-            // Direct message
             if (newMsg.receiver_id && !newMsg.group_id) {
               if (newMsg.receiver_id === currentUser.id || newMsg.sender_id === currentUser.id) {
                 isForCurrentUser = true;
               }
             }
-            // Group message
             else if (newMsg.group_id) {
-              // Check if user is in this group
               if (groupMembers[newMsg.group_id] && groupMembers[newMsg.group_id].includes(currentUser.id)) {
                 isForCurrentUser = true;
               }
             }
             
             if (isForCurrentUser) {
-              // If this is the currently selected chat, add the message
               if (selectedChatType === 'direct' && (newMsg.receiver_id === selectedChatId || newMsg.sender_id === selectedChatId)) {
                 const exists = messages.some(m => m.id === newMsg.id);
                 if (!exists) {
@@ -1300,7 +1307,6 @@
                 }
               }
               
-              // Send notification if not from current user and tab is hidden
               if (!isDocumentVisible && newMsg.sender_id !== currentUser.id) {
                 const senderName = userMap[newMsg.sender_id] || 'Unknown';
                 let title = senderName;
@@ -1316,9 +1322,7 @@
             }
           }
         )
-        .subscribe((status) => {
-          console.log('📡 Message subscription status:', status);
-        });
+        .subscribe();
     }
 
     // ================================================================
